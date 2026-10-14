@@ -320,6 +320,7 @@
         </select>
 
         <button onclick="randomizeActiveTeam()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white border border-purple-400/40 text-xs font-bold transition active:scale-95 shadow-glow-purple">🎲 Random Team</button>
+        <button onclick="rerunLastTeamDraw()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-amber-700/50 text-xs font-bold transition active:scale-95">↶ Rerun Team Draw</button>
         <button onclick="advanceToNextTeamInQueue()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition active:scale-95">Call Next Team &rarr;</button>
       </div>
       <div class="w-full flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80">
@@ -373,12 +374,26 @@
     <div id="dumbCharadesPanel" class="hidden hud-card rounded-3xl p-6 border-2 border-fuchsia-500/40 shadow-lg flex flex-col items-center text-center gap-4">
       <div class="text-4xl">🎭</div>
       <h3 class="text-xl font-bold font-display text-fuchsia-300">Round 2: Dumb Charades</h3>
-      <p class="text-sm text-slate-300 max-w-xl">Use the <strong>Random Team</strong> button above to select which team plays next. No topic wheel or PPT allocation is used in this round.</p>
-      <div class="w-full max-w-lg rounded-2xl bg-slate-950/80 border border-fuchsia-500/30 p-6">
-        <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Selected Team</div>
-        <div id="dumbCharadesSelectedTeam" class="text-2xl sm:text-3xl font-black text-white">Awaiting Team Selection</div>
+      <p class="text-sm text-slate-300 max-w-xl">Select a team randomly, then give them one minute to act out the term. The PPT specifies two charades rounds, with 20 points for each correct guess.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
+        <div class="rounded-2xl bg-slate-950/80 border border-fuchsia-500/30 p-5">
+          <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Selected Team</div>
+          <div id="dumbCharadesSelectedTeam" class="text-2xl sm:text-3xl font-black text-white">Awaiting Team Selection</div>
+          <div class="text-xs text-fuchsia-200 mt-3">Charades Term <span id="charadesTermNumber">1</span> of 2</div>
+        </div>
+        <div class="rounded-2xl bg-slate-950/80 border border-fuchsia-500/30 p-5 flex flex-col items-center justify-center">
+          <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">1-Minute Timer</div>
+          <div id="timerCharadesDisplay" class="font-mono text-4xl sm:text-5xl font-extrabold text-fuchsia-300 digital-glow">01:00</div>
+          <span id="badgeCharadesStatus" class="mt-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-600">Ready</span>
+          <div class="flex flex-wrap justify-center gap-2 mt-4">
+            <button id="btnCharadesToggle" onclick="toggleTimer('charades')" class="px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold">Start Timer</button>
+            <button onclick="resetTimer('charades')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700">Reset</button>
+            <button onclick="nextCharadesTerm()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 text-xs font-semibold border border-amber-700/50">Next Term →</button>
+          </div>
+        </div>
       </div>
-      <button onclick="randomizeActiveTeam()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-sm font-bold shadow-lg">🎲 Randomize Team</button>
+      <button onclick="randomizeActiveTeam()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-sm font-bold shadow-lg">🎲 Randomize Team & Start 1-Min Timer</button>
+      <p class="text-xs text-slate-400">Rule reminder: gestures only; no speaking or whispering. If the performer speaks, that term scores 0. Other teams speaking out of turn lose 10 points.</p>
     </div>
 
     <div id="mainRoundContent" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
@@ -465,7 +480,7 @@
 
         </button>
 
-
+        <button onclick="rerunLastTopicDraw()" class="w-full py-2 px-4 rounded-xl font-semibold text-xs text-amber-200 bg-amber-950/70 hover:bg-amber-900 border border-amber-700/50 transition flex items-center justify-center gap-2 mt-2">↶ Undo / Rerun Last Topic Draw</button>
 
         <!-- Current Live Paired Allotment Banner -->
 
@@ -1320,22 +1335,21 @@
 
 
 
+    // Restore the configured data and remaining topic pools from this browser.
+    let savedAppState = {};
+    try { savedAppState = JSON.parse(localStorage.getItem('funWithFinance_appState') || '{}') || {}; } catch (e) { savedAppState = {}; }
+
     // Master state
-
-    let teamsList = [...DEFAULT_TEAMS];
-
-    let currentTeamIndex = 0; // Tracks calling queue
-    let hasActiveTeamSelection = false; // Keep the team display empty until a team is chosen
-
-
-
-    let extemporePool = [...DEFAULT_EXTEMPORE_TOPICS];
-
-    let pptPool = [...DEFAULT_PPT_TOPICS];
-
-    let currentRound = 1;
-
-
+    let teamsList = Array.isArray(savedAppState.teamsList) && savedAppState.teamsList.length ? savedAppState.teamsList : [...DEFAULT_TEAMS];
+    let currentTeamIndex = Number.isInteger(savedAppState.currentTeamIndex) ? savedAppState.currentTeamIndex : 0;
+    let hasActiveTeamSelection = Boolean(savedAppState.hasActiveTeamSelection);
+    let configuredR1Topics = Array.isArray(savedAppState.configuredR1Topics) && savedAppState.configuredR1Topics.length ? savedAppState.configuredR1Topics : [...DEFAULT_EXTEMPORE_TOPICS];
+    let configuredPptTopics = Array.isArray(savedAppState.configuredPptTopics) && savedAppState.configuredPptTopics.length ? savedAppState.configuredPptTopics : [...DEFAULT_PPT_TOPICS];
+    let extemporePool = Array.isArray(savedAppState.extemporePool) ? savedAppState.extemporePool : [...configuredR1Topics];
+    let pptPool = Array.isArray(savedAppState.pptPool) ? savedAppState.pptPool : [...configuredPptTopics];
+    let currentRound = [1, 2, 3].includes(savedAppState.currentRound) ? savedAppState.currentRound : 1;
+    let charadesTermNumber = savedAppState.charadesTermNumber === 2 ? 2 : 1;
+    let lastTeamDraw = savedAppState.lastTeamDraw || null;
 
     // Logs are saved in this browser automatically. For shared, cross-device logs, connect a hosted database.
     let allotmentHistory = [];
@@ -1349,9 +1363,19 @@
 
     // Track randomizer selections independently for each round so a team cannot
     // be randomly selected twice within the same round.
-    let randomizerPickedTeamsByRound = { 1: new Set(), 2: new Set(), 3: new Set() };
+    let randomizerPickedTeamsByRound = { 1: new Set(savedAppState.randomizerPickedTeamsByRound?.[1] || []), 2: new Set(savedAppState.randomizerPickedTeamsByRound?.[2] || []), 3: new Set(savedAppState.randomizerPickedTeamsByRound?.[3] || []) };
+    let lastAssignedData = savedAppState.lastAssignedData || null;
 
-    let lastAssignedData = null;
+    function saveAppState() {
+      try {
+        localStorage.setItem('funWithFinance_appState', JSON.stringify({
+          teamsList, currentTeamIndex, hasActiveTeamSelection, configuredR1Topics, configuredPptTopics,
+          extemporePool, pptPool, currentRound, charadesTermNumber, lastAssignedData, lastTeamDraw,
+          timerCharadesCurrent: timers && timers.charades ? timers.charades.current : 60,
+          randomizerPickedTeamsByRound: Object.fromEntries(Object.entries(randomizerPickedTeamsByRound).map(([round, set]) => [round, Array.from(set)]))
+        }));
+      } catch (e) { console.warn('Could not save event configuration in this browser.', e); }
+    }
 
 
 
@@ -1585,11 +1609,15 @@
         return;
       }
 
+      const previous = { currentTeamIndex, hasActiveTeamSelection, picked: Array.from(alreadyRandomized) };
       const pick = remaining[Math.floor(Math.random() * remaining.length)];
       alreadyRandomized.add(pick.team);
+      lastTeamDraw = { round: currentRound, previous, selectedTeam: pick.team, selectedIndex: pick.index };
       currentTeamIndex = pick.index;
       hasActiveTeamSelection = true;
       updateQueueUI();
+      saveAppState();
+      if (currentRound === 2) { resetTimer('charades'); toggleTimer('charades'); }
 
       if (alreadyRandomized.size >= teamsList.length) {
         showToast(`Random team selected: ${pick.team}. All ${teamsList.length} teams selected! Randomizer reset for the next cycle.`, 'success');
@@ -1597,6 +1625,36 @@
       } else {
         showToast(`Random team selected: ${pick.team} (${alreadyRandomized.size}/${teamsList.length} teams in this cycle)`, 'success');
       }
+      saveAppState();
+    }
+
+    function rerunLastTeamDraw() {
+      if (!lastTeamDraw) { showToast('No team draw is available to rerun yet.', 'info'); return; }
+      const draw = lastTeamDraw;
+      if (draw.round !== currentRound) { showToast(`The last team draw was in Round ${draw.round}. Switch to that round to rerun it.`, 'info'); return; }
+      const set = randomizerPickedTeamsByRound[currentRound];
+      set.clear();
+      (draw.previous.picked || []).forEach(team => set.add(team));
+      currentTeamIndex = Number.isInteger(draw.previous.currentTeamIndex) ? draw.previous.currentTeamIndex : 0;
+      hasActiveTeamSelection = Boolean(draw.previous.hasActiveTeamSelection);
+      lastTeamDraw = null;
+      updateQueueUI();
+      if (currentRound === 2) resetTimer('charades');
+      saveAppState();
+      showToast('Last team draw rolled back. Randomize again to rerun this team selection.', 'success');
+    }
+
+    function nextCharadesTerm() {
+      if (charadesTermNumber >= 2) {
+        charadesTermNumber = 1;
+        randomizerPickedTeamsByRound[2].clear();
+        showToast('Both charades terms completed. Starting a fresh two-term cycle.', 'info');
+      } else {
+        charadesTermNumber++;
+      }
+      document.getElementById('charadesTermNumber').innerText = charadesTermNumber;
+      resetTimer('charades');
+      saveAppState();
     }
 
     function onManualSelectActiveTeam(idxStr) {
@@ -1609,7 +1667,7 @@
         hasActiveTeamSelection = true;
 
         updateQueueUI();
-
+        saveAppState();
         showToast(`Calling queue shifted to: ${teamsList[currentTeamIndex]}`, "info");
 
       }
@@ -2005,15 +2063,10 @@
 
 
       if (currentRound === 1) {
-
         resetTimer('prep');
-
         resetTimer('speak');
-
-      } else {
-
+      } else if (currentRound === 3) {
         updatePptRosterUI();
-
       }
 
 
@@ -2043,16 +2096,21 @@
       // Auto-advance calling queue index after assignment
 
       if (currentTeamIndex < teamsList.length - 1) {
-
         currentTeamIndex++;
-
         updateQueueUI();
-
       }
-
+      saveAppState();
     }
 
 
+
+    function rerunLastTopicDraw() {
+      if (![1, 3].includes(currentRound)) { showToast('Topic reruns are available only in Round 1 and Round 3.', 'info'); return; }
+      const latest = [...allotmentHistory].reverse().find(item => item.round === currentRound);
+      if (latest) lastAssignedData = { round: latest.round, topic: latest.topic, team: latest.team };
+      if (!lastAssignedData || lastAssignedData.round !== currentRound) { showToast(`No topic draw is available to rerun for Round ${currentRound}.`, 'info'); return; }
+      undoLastAward();
+    }
 
     function openAwardModal(team, topic) {
 
@@ -2111,61 +2169,29 @@
 
 
     function undoLastAward() {
-
-      if (!lastAssignedData) {
-
-        closeAwardModal();
-
-        return;
-
+      if (!lastAssignedData) { closeAwardModal(); return; }
+      const draw = lastAssignedData;
+      if (draw.round === 1) {
+        if (!extemporePool.includes(draw.topic)) extemporePool.push(draw.topic);
+      } else if (draw.round === 3) {
+        if (!pptPool.includes(draw.topic)) pptPool.push(draw.topic);
       }
-
-
-
-      if (lastAssignedData.round === 1) {
-
-        extemporePool.push(lastAssignedData.topic);
-
-      } else {
-
-        pptPool.push(lastAssignedData.topic);
-
-      }
-
-
-
-      allotmentHistory.pop();
-
-      if (currentTeamIndex > 0) currentTeamIndex--;
-
-      updateQueueUI();
-
-
-
+      const lastIndex = allotmentHistory.map(h => h.round).lastIndexOf(draw.round);
+      if (lastIndex >= 0) allotmentHistory.splice(lastIndex, 1);
+      const teamIndex = teamsList.indexOf(draw.team);
+      if (teamIndex >= 0) { currentTeamIndex = teamIndex; hasActiveTeamSelection = true; }
+      document.getElementById('liveTopicBanner').innerText = 'Spin the mystery wheel to allot topic!';
+      document.getElementById('liveResultTeamTag').innerText = '---';
       lastAssignedData = null;
-
-      document.getElementById('liveTopicBanner').innerText = "Spin the mystery wheel to allot topic!";
-
-      document.getElementById('liveResultTeamTag').innerText = "---";
-
-
-
+      updateQueueUI();
       updateStatusBadges();
-
       updateHistoryLogUI();
-
-      if (currentRound === 3) updatePptRosterUI();
-
-
-
+      updatePptRosterUI();
+      saveAppState();
       closeAwardModal();
-
       drawWheel();
-
-      showToast("Undone! Topic restored back to wheel", "info");
-
+      showToast('Last topic draw undone. The topic is back in the wheel; spin again to rerun it.', 'success');
     }
-
 
 
     function reshuffleWheel() {
@@ -2203,6 +2229,7 @@
     function updateHistoryLogUI() {
 
       try { localStorage.setItem('funWithFinance_allotmentHistory', JSON.stringify(allotmentHistory)); } catch (e) { console.warn('Could not save event log in this browser.', e); }
+      if (typeof saveAppState === 'function') saveAppState();
       const panel = document.getElementById('historyLogPanel');
 
       document.getElementById('historyLogCount').innerText = allotmentHistory.length;
@@ -2428,7 +2455,10 @@
       document.getElementById('dumbCharadesPanel').classList.toggle('hidden', roundNumber !== 2);
       document.getElementById('mainRoundContent').classList.toggle('hidden', roundNumber === 2);
       updateStatusBadges();
+      const termEl = document.getElementById('charadesTermNumber');
+      if (termEl) termEl.innerText = charadesTermNumber;
       drawWheel();
+      saveAppState();
     }
 
 
@@ -2476,6 +2506,10 @@
 
         displayId: 'timerPresentationDisplay', btnId: 'btnPresentToggle', ringId: 'ringPresentCircle', badgeId: 'badgePresentStatus'
 
+      },
+      charades: {
+        total: 60, current: Number.isInteger(savedAppState.timerCharadesCurrent) ? savedAppState.timerCharadesCurrent : 60, interval: null, running: false,
+        name: "Dumb Charades Timer", displayId: 'timerCharadesDisplay', btnId: 'btnCharadesToggle', ringId: 'ringCharadesCircle', badgeId: 'badgeCharadesStatus'
       }
 
     };
@@ -2577,8 +2611,7 @@
           document.getElementById(t.displayId).innerText = formatTime(t.current);
 
           updateRadialRing(key);
-
-
+          saveAppState();
 
           // 1-minute alert bell for presentation
 
@@ -2794,9 +2827,9 @@
 
       document.getElementById('feedTeamsInput').value = teamsList.join('\n');
 
-      document.getElementById('feedR1Input').value = extemporePool.join('\n');
+      document.getElementById('feedR1Input').value = configuredR1Topics.join('\n');
 
-      document.getElementById('feedR2Input').value = pptPool.join('\n');
+      document.getElementById('feedR2Input').value = configuredPptTopics.join('\n');
 
 
 
@@ -2838,9 +2871,9 @@
 
       document.getElementById('countTeamsBadge').innerText = teamsList.length;
 
-      document.getElementById('countR1Badge').innerText = extemporePool.length;
+      document.getElementById('countR1Badge').innerText = configuredR1Topics.length;
 
-      document.getElementById('countR2Badge').innerText = pptPool.length;
+      document.getElementById('countR2Badge').innerText = configuredPptTopics.length;
 
     }
 
@@ -2953,30 +2986,21 @@
 
 
       teamsList = parsedTeams;
-
-      if (currentTeamIndex >= teamsList.length) {
-
-        currentTeamIndex = 0;
-
-      }
-
-
-
-      extemporePool = parsedR1;
-
-      pptPool = parsedR2;
-
-
-
+      if (currentTeamIndex >= teamsList.length) { currentTeamIndex = 0; hasActiveTeamSelection = false; }
+      configuredR1Topics = [...parsedR1];
+      configuredPptTopics = [...parsedR2];
+      extemporePool = [...parsedR1];
+      pptPool = [...parsedR2];
+      randomizerPickedTeamsByRound = { 1: new Set(), 2: new Set(), 3: new Set() };
+      lastAssignedData = null;
+      lastTeamDraw = null;
       updateQueueUI();
-
       updateStatusBadges();
-
+      updatePptRosterUI();
       drawWheel();
-
+      saveAppState();
       closeDataDrawer();
-
-      showToast("Teams & Topics configuration updated successfully!", "success");
+      showToast("Teams & Topics configuration saved for all rounds and future refreshes!", "success");
 
     }
 
